@@ -69,7 +69,7 @@ if __name__ == "__main__":
         kernel[4:8,:] = -1
         
         imi = io.imread(f, as_grey=True)
-        #imi = rotate(imi, 5)
+        imi = rotate(imi, 2)
         image = imi[:,int(imi.shape[1]*0.6):].astype("float")
         filtered = horizontal_edge_response = convolve(image, kernel)
         
@@ -92,12 +92,35 @@ if __name__ == "__main__":
         print fitx.shape, fity.shape
         #fit = np.vstack((np.tile(fitx,7), np.tile(fity,6)))
         
+        reps = np.zeros((9,8), dtype='int, int')
         for ix,x in enumerate(fitx):
             for iy,y in enumerate(fity):
-                print "%d %d: %4d %4d     " % (ix,iy,x,y),
                 idx = [np.linalg.norm([x-markers_x, y-markers_y], axis=0)<155]
                 correct_x, correct_y = np.median(markers_x[idx]), np.median(markers_y[idx])
-                plt.scatter(correct_x, correct_y, color='green')
+                reps[iy+1,ix+1] = correct_x, correct_y
+    
 
+
+        for i in range(1,8):
+            reps[i,0][0] = reps[i,1][0]-(reps[i,2][0]-reps[i,1][0])
+            reps[i,0][1] = reps[i,1][1]-(reps[i,2][1]-reps[i,1][1])
+
+            reps[i,7][0] = reps[i,6][0]+(reps[i,6][0]-reps[i,5][0])
+            reps[i,7][1] = reps[i,6][1]+(reps[i,6][1]-reps[i,5][1])
+
+        for i in range(0,8):
+            reps[0,i][0] = reps[1,i][0]-(reps[2,i][0]-reps[1,i][0])
+            reps[0,i][1] = reps[1,i][1]-(reps[2,i][1]-reps[1,i][1])
+
+            reps[8,i][0] = reps[7,i][0]+(reps[7,i][0]-reps[6,i][0])
+            reps[8,i][1] = reps[7,i][1]+(reps[7,i][1]-reps[6,i][1])
+
+        print reps
+
+        plt.figure("extract")
+        plt.imshow(image, cmap="gray")
+
+
+        plt.scatter([p[0] for p in reps.flat], [p[1] for p in reps.flat], color='red')
         plt.show()
 
