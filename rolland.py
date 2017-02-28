@@ -18,7 +18,7 @@ from scipy.optimize import leastsq
 from scipy.stats import binned_statistic
 
 
-options = { 'verbose' : False }
+options = { 'verbose' : True }
 
 
 def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_files=0):
@@ -33,9 +33,9 @@ def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_file
 
 
 def fit_and_predict(fx,fy, predict):
-    func_linear=lambda params,x : params[0]*x+params[1]
-    error_func=lambda params,fx,fy: func_linear(params,fx)-fy
-    final_params,success=leastsq(error_func,(1.0,2.0),args=(fx,fy))
+    func_linear = lambda params,x: params[0]*x+params[1]
+    error_func  = lambda params,fx,fy: func_linear(params,fx)-fy
+    final_params,success = leastsq(error_func,(1.0,2.0),args=(np.asarray(fx),np.asarray(fy)))
     return func_linear(final_params,predict)
 
 
@@ -78,33 +78,93 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
     if options["verbose"]:
         plt.scatter(markers_x,markers_y)
         plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
-        plt.show()
 
     grid = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
+    valid = np.zeros((cross_h+2,cross_w+2), dtype=bool)
     for ix,x in enumerate(fitx):
         for iy,y in enumerate(fity):
-            idx = [np.linalg.norm([x-markers_x, y-markers_y], axis=0)<dist_thres]
+            idx = [np.linalg.norm([x-markers_x, y-markers_y], ord=2, axis=0)<dist_thres]
             if np.sum(idx) > 0:
-                correct_x, correct_y = np.median(markers_x[idx]), np.median(markers_y[idx])
+                grid[iy+1,ix+1] = np.median(markers_x[idx]), np.median(markers_y[idx])
+                valid[iy+1,ix+1] = True
             else:
-                correct_x, correct_y = x,y # no values found, use as predicted from grid
-            grid[iy+1,ix+1] = correct_x, correct_y
+                valid[iy+1,ix+1] = False
+
+    left  = grid[cross_h/2+1,cross_w/2-2][0],grid[cross_h/2+1,cross_w/2-2][1]
+    right = grid[cross_h/2+1,cross_w/2+3][0],grid[cross_h/2+1,cross_w/2+3][1]
+    mid = (np.asarray(left) + np.asarray(right)) / 2
+    rotation = np.arctan2(*(right-mid)[::-1])/np.pi*180
+    #plt.scatter(*left, color="black")
+    #plt.scatter(*mid, color="black")
+    #plt.scatter(*right, color="black")
 
 
+    #for i in range(1,cross_h+1):
+    #    grid[i,0][0] = grid[i,1][0]-(grid[i,2][0]-grid[i,1][0])
+    #    grid[i,0][1] = grid[i,1][1]-(grid[i,2][1]-grid[i,1][1])
+
+    #    grid[i,cross_w+1][0] = grid[i,cross_w][0]+(grid[i,cross_w][0]-grid[i,cross_w-1][0])
+    #    grid[i,cross_w+1][1] = grid[i,cross_w][1]+(grid[i,cross_w][1]-grid[i,cross_w-1][1])
+
+    #for i in range(0,cross_w+2):
+    #    grid[0,i][0] = grid[1,i][0]-(grid[2,i][0]-grid[1,i][0])
+    #    grid[0,i][1] = grid[1,i][1]-(grid[2,i][1]-grid[1,i][1])
+
+    #    grid[cross_h+1,i][0] = grid[cross_h,i][0]+(grid[cross_h,i][0]-grid[cross_h-1,i][0])
+    #    grid[cross_h+1,i][1] = grid[cross_h,i][1]+(grid[cross_h,i][1]-grid[cross_h-1,i][1])
+
+
+    print
     for i in range(1,cross_h+1):
-        grid[i,0][0] = grid[i,1][0]-(grid[i,2][0]-grid[i,1][0])
-        grid[i,0][1] = grid[i,1][1]-(grid[i,2][1]-grid[i,1][1])
+        fx = [x             for x,v in zip(np.arange(cross_w+2), valid[i]) if v]
+        fy = [grid[i,j][0]  for j,v in zip(np.arange(cross_w+2), valid[i]) if v]
+        fit1 = fit_and_predict(fx, fy, np.arange(0,cross_w+2))
+        fy = [grid[i,j][1]  for j,v in zip(np.arange(cross_w+2), valid[i]) if v]
+        fit2 = fit_and_predict(fx, fy, np.arange(0,cross_w+2))
 
-        grid[i,cross_w+1][0] = grid[i,cross_w][0]+(grid[i,cross_w][0]-grid[i,cross_w-1][0])
-        grid[i,cross_w+1][1] = grid[i,cross_w][1]+(grid[i,cross_w][1]-grid[i,cross_w-1][1])
+        for j in range(cross_w+2):
+            if not valid[i,j]:
+                grid[i,j] = (int(fit1[j]),  int(fit2[j]))
 
     for i in range(0,cross_w+2):
-        grid[0,i][0] = grid[1,i][0]-(grid[2,i][0]-grid[1,i][0])
-        grid[0,i][1] = grid[1,i][1]-(grid[2,i][1]-grid[1,i][1])
+        fx = [x             for x in np.arange(1,cross_h+1)]
+        fy = [grid[j,i][0]  for j in np.arange(1,cross_h+1)]
+        fit1 = fit_and_predict(fx, fy, np.arange(0,cross_h+2))
+        fy = [grid[j,i][1]  for j in np.arange(1,cross_h+1)]
+        fit2 = fit_and_predict(fx, fy, np.arange(0,cross_h+2))
 
-        grid[cross_h+1,i][0] = grid[cross_h,i][0]+(grid[cross_h,i][0]-grid[cross_h-1,i][0])
-        grid[cross_h+1,i][1] = grid[cross_h,i][1]+(grid[cross_h,i][1]-grid[cross_h-1,i][1])
-    return grid
+        grid[0,i]         = (int(fit1[0]),  int(fit2[0]))
+        grid[cross_h+1,i] = (int(fit1[-1]), int(fit2[-1]))
+
+    return grid, rotation
+
+
+def process_plate(image, kernel, (cross_h,cross_w)):
+    filtered = convolve(image, kernel)
+    
+    if options["verbose"]:
+        fig, (ax0,ax1) = plt.subplots(1,2)
+        ax0.imshow(image, interpolation='none', cmap=plt.cm.gray)
+        ax1.imshow(filtered, interpolation='none', cmap=plt.cm.gray)
+
+    grid, rotation = compute_grid(filtered, (cross_h,cross_w))
+    print "(rotation: %f)" % rotation
+
+    if options["verbose"]:
+        plt.figure("extract")
+        plt.imshow(image, cmap="gray")
+
+        plt.scatter([p[0] for p in grid.flat], [p[1] for p in grid.flat], color='red')
+        plt.show()
+
+    for i in range(cross_h+1):
+        for j in range(cross_w+1):
+            xb, xe = np.min((grid[i,j][0], grid[i+1,j][0])), np.max((grid[i,j+1][0], grid[i+1,j+1][0])) 
+            yb, ye = np.min((grid[i,j][1], grid[i,j+1][1])), np.max((grid[i+1,j][1], grid[i+1,j+1][1])) 
+            
+            plt.figure("%d,%d"%(i,j))
+            plt.imshow(image[yb:ye,xb:xe], cmap='gray')
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -116,36 +176,13 @@ if __name__ == "__main__":
 
     file_list = get_file_list("images", max_files=0)
 
-    for n,f in enumerate(file_list[0:]):
-        print "%d/%d %s" % (n+1,len(file_list),f)
+    for n,f in enumerate(file_list[-1:]):
+        print "%d/%d %s" % (n+1,len(file_list),f),
 
-        imi = io.imread(f, as_grey=True)
-        #imi = rotate(imi, 2)
-        image = imi[:,int(imi.shape[1]*0.6):].astype("float")
-        filtered = horizontal_edge_response = convolve(image, kernel)
-        
-        if options["verbose"]:
-            fig, (ax0,ax1) = plt.subplots(1,2)
-            ax0.imshow(image, interpolation='none', cmap=plt.cm.gray)
-            ax1.imshow(filtered, interpolation='none', cmap=plt.cm.gray)
+        imi = io.imread(f)
+        plate_left  = imi[:, int(0.6*imi.shape[1]):].astype('float')
+        plate_right = imi[:,:int(0.4*imi.shape[1]) ].astype('float')
 
+        process_plate(plate_left,  kernel, (cross_h, cross_w))
+        process_plate(plate_right, kernel, (cross_h, cross_w))
 
-        grid = compute_grid(filtered, (cross_h,cross_w))
-        print grid
-
-        for i in range(cross_h+1):
-            for j in range(cross_w+1):
-                xb, xe = np.min((grid[i,j][0], grid[i+1,j][0])), np.max((grid[i,j+1][0], grid[i+1,j+1][0])) 
-                yb, ye = np.min((grid[i,j][1], grid[i,j+1][1])), np.max((grid[i+1,j][1], grid[i+1,j+1][1])) 
-                
-                plt.figure("%d,%d"%(i,j))
-                plt.imshow(image[yb:ye,xb:xe], cmap='gray')
-
-        plt.show()
-
-        if options["verbose"]:
-            plt.figure("extract")
-            plt.imshow(image, cmap="gray")
-
-            plt.scatter([p[0] for p in grid.flat], [p[1] for p in grid.flat], color='red')
-            plt.show()
