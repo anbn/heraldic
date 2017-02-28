@@ -55,21 +55,28 @@ def bin_and_predict(vals, bins, verbose=False):
     return fyy
 
 
+def build_kernel(size, band):
+    kernel = np.ones((size,size))
+    kernel[:,size/2-band/2:size/2+band/2] = -1
+    kernel[size/2-band/2:size/2+band/2,:] = -1
+    return kernel
+
+
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True, linewidth=160)
-    print "Rolland"
+
+    cross_w, cross_h = 6,7
+    #cross_w, cross_h = 6,5
+    kernel = build_kernel(32,4)
+
 
     file_list = get_file_list("images", max_files=0)
 
-    for n,f in enumerate(file_list):
+    for n,f in enumerate(file_list[0:]):
         print "%d/%d %s" % (n+1,len(file_list),f)
 
-        kernel = np.ones((12,12))
-        kernel[:,4:8] = -1
-        kernel[4:8,:] = -1
-        
         imi = io.imread(f, as_grey=True)
-        imi = rotate(imi, 2)
+        #imi = rotate(imi, 2)
         image = imi[:,int(imi.shape[1]*0.6):].astype("float")
         filtered = horizontal_edge_response = convolve(image, kernel)
         
@@ -82,45 +89,42 @@ if __name__ == "__main__":
         markers_x = markers[0,-128:,1]
         plt.scatter(markers_x,markers_y)
 
-        fitx = bin_and_predict(markers_x,6)
-        fity = bin_and_predict(markers_y,7)
+        fitx = bin_and_predict(markers_x,cross_w)
+        fity = bin_and_predict(markers_y,cross_h)
 
-        plt.scatter(np.tile(fitx,7), np.tile(fity,6), color='yellow')
-        #print np.vstack((np.tile(hist_stats_x,7), np.tile(hist_stats_y,6)))
+        plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
+        plt.show()
 
-
-        print fitx.shape, fity.shape
-        #fit = np.vstack((np.tile(fitx,7), np.tile(fity,6)))
-        
-        reps = np.zeros((9,8), dtype='int, int')
+        reps = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
         for ix,x in enumerate(fitx):
             for iy,y in enumerate(fity):
-                idx = [np.linalg.norm([x-markers_x, y-markers_y], axis=0)<155]
-                correct_x, correct_y = np.median(markers_x[idx]), np.median(markers_y[idx])
+                idx = [np.linalg.norm([x-markers_x, y-markers_y], axis=0)<25]
+                if np.sum(idx) > 0:
+                    correct_x, correct_y = np.median(markers_x[idx]), np.median(markers_y[idx])
+                else:
+                    correct_x, correct_y = x,y # no values found, use as predicted from grid
                 reps[iy+1,ix+1] = correct_x, correct_y
     
 
 
-        for i in range(1,8):
+        for i in range(1,cross_h+1):
             reps[i,0][0] = reps[i,1][0]-(reps[i,2][0]-reps[i,1][0])
             reps[i,0][1] = reps[i,1][1]-(reps[i,2][1]-reps[i,1][1])
 
-            reps[i,7][0] = reps[i,6][0]+(reps[i,6][0]-reps[i,5][0])
-            reps[i,7][1] = reps[i,6][1]+(reps[i,6][1]-reps[i,5][1])
+            reps[i,cross_w+1][0] = reps[i,cross_w][0]+(reps[i,cross_w][0]-reps[i,cross_w-1][0])
+            reps[i,cross_w+1][1] = reps[i,cross_w][1]+(reps[i,cross_w][1]-reps[i,cross_w-1][1])
 
-        for i in range(0,8):
+        for i in range(0,cross_w+2):
             reps[0,i][0] = reps[1,i][0]-(reps[2,i][0]-reps[1,i][0])
             reps[0,i][1] = reps[1,i][1]-(reps[2,i][1]-reps[1,i][1])
 
-            reps[8,i][0] = reps[7,i][0]+(reps[7,i][0]-reps[6,i][0])
-            reps[8,i][1] = reps[7,i][1]+(reps[7,i][1]-reps[6,i][1])
+            reps[cross_h+1,i][0] = reps[cross_h,i][0]+(reps[cross_h,i][0]-reps[cross_h-1,i][0])
+            reps[cross_h+1,i][1] = reps[cross_h,i][1]+(reps[cross_h,i][1]-reps[cross_h-1,i][1])
 
         print reps
 
         plt.figure("extract")
         plt.imshow(image, cmap="gray")
 
-
         plt.scatter([p[0] for p in reps.flat], [p[1] for p in reps.flat], color='red')
         plt.show()
-
