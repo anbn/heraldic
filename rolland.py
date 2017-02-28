@@ -64,6 +64,7 @@ def build_kernel(size, band):
 
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True, linewidth=160)
+    options = {'verbose' : False}
 
     cross_w, cross_h = 6,7
     #cross_w, cross_h = 6,5
@@ -80,20 +81,22 @@ if __name__ == "__main__":
         image = imi[:,int(imi.shape[1]*0.6):].astype("float")
         filtered = horizontal_edge_response = convolve(image, kernel)
         
-        fig, (ax0,ax1) = plt.subplots(1,2)
-        ax0.imshow(image, interpolation='nearest', cmap=plt.cm.gray)
-        ax1.imshow(filtered, interpolation='nearest', cmap=plt.cm.gray)
+        if options["verbose"]:
+            fig, (ax0,ax1) = plt.subplots(1,2)
+            ax0.imshow(image, interpolation='nearest', cmap=plt.cm.gray)
+            ax1.imshow(filtered, interpolation='nearest', cmap=plt.cm.gray)
 
         markers = np.dstack(np.unravel_index(np.argsort(filtered.ravel()), image.shape))
         markers_y = markers[0,-128:,0]
         markers_x = markers[0,-128:,1]
-        plt.scatter(markers_x,markers_y)
 
         fitx = bin_and_predict(markers_x,cross_w)
         fity = bin_and_predict(markers_y,cross_h)
 
-        plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
-        plt.show()
+        if options["verbose"]:
+            plt.scatter(markers_x,markers_y)
+            plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
+            plt.show()
 
         reps = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
         for ix,x in enumerate(fitx):
@@ -121,10 +124,22 @@ if __name__ == "__main__":
             reps[cross_h+1,i][0] = reps[cross_h,i][0]+(reps[cross_h,i][0]-reps[cross_h-1,i][0])
             reps[cross_h+1,i][1] = reps[cross_h,i][1]+(reps[cross_h,i][1]-reps[cross_h-1,i][1])
 
+
         print reps
 
-        plt.figure("extract")
-        plt.imshow(image, cmap="gray")
+        for i in range(cross_h+1):
+            for j in range(cross_w+1):
+                xb, xe = np.min((reps[i,j][0], reps[i+1,j][0])), np.max((reps[i,j+1][0], reps[i+1,j+1][0])) 
+                yb, ye = np.min((reps[i,j][1], reps[i,j+1][1])), np.max((reps[i+1,j][1], reps[i+1,j+1][1])) 
+                
+                plt.figure("%d,%d"%(i,j))
+                plt.imshow(image[yb:ye,xb:xe], cmap='gray')
 
-        plt.scatter([p[0] for p in reps.flat], [p[1] for p in reps.flat], color='red')
         plt.show()
+
+        if options["verbose"]:
+            plt.figure("extract")
+            plt.imshow(image, cmap="gray")
+
+            plt.scatter([p[0] for p in reps.flat], [p[1] for p in reps.flat], color='red')
+            plt.show()
