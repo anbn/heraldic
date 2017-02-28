@@ -18,6 +18,8 @@ from scipy.optimize import leastsq
 from scipy.stats import binned_statistic
 
 
+options = { 'verbose' : False }
+
 
 def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_files=0):
     file_list = []
@@ -31,7 +33,6 @@ def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_file
 
 
 def fit_and_predict(fx,fy, predict):
-    # we do a linear fit
     func_linear=lambda params,x : params[0]*x+params[1]
     error_func=lambda params,fx,fy: func_linear(params,fx)-fy
     final_params,success=leastsq(error_func,(1.0,2.0),args=(fx,fy))
@@ -62,14 +63,56 @@ def build_kernel(size, band):
     return kernel
 
 
+def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
+    """ fits a grid over the given responses
+        num: take num highest responses
+        dist_thres: discard points more than dist_thres pixels away from grid crossings
+    """
+    markers = np.dstack(np.unravel_index(np.argsort(filtered.ravel()), filtered.shape))
+    markers_y = markers[0,-num:,0]
+    markers_x = markers[0,-num:,1]
+
+    fitx = bin_and_predict(markers_x,cross_w)
+    fity = bin_and_predict(markers_y,cross_h)
+
+    if options["verbose"]:
+        plt.scatter(markers_x,markers_y)
+        plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
+        plt.show()
+
+    grid = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
+    for ix,x in enumerate(fitx):
+        for iy,y in enumerate(fity):
+            idx = [np.linalg.norm([x-markers_x, y-markers_y], axis=0)<dist_thres]
+            if np.sum(idx) > 0:
+                correct_x, correct_y = np.median(markers_x[idx]), np.median(markers_y[idx])
+            else:
+                correct_x, correct_y = x,y # no values found, use as predicted from grid
+            grid[iy+1,ix+1] = correct_x, correct_y
+
+
+    for i in range(1,cross_h+1):
+        grid[i,0][0] = grid[i,1][0]-(grid[i,2][0]-grid[i,1][0])
+        grid[i,0][1] = grid[i,1][1]-(grid[i,2][1]-grid[i,1][1])
+
+        grid[i,cross_w+1][0] = grid[i,cross_w][0]+(grid[i,cross_w][0]-grid[i,cross_w-1][0])
+        grid[i,cross_w+1][1] = grid[i,cross_w][1]+(grid[i,cross_w][1]-grid[i,cross_w-1][1])
+
+    for i in range(0,cross_w+2):
+        grid[0,i][0] = grid[1,i][0]-(grid[2,i][0]-grid[1,i][0])
+        grid[0,i][1] = grid[1,i][1]-(grid[2,i][1]-grid[1,i][1])
+
+        grid[cross_h+1,i][0] = grid[cross_h,i][0]+(grid[cross_h,i][0]-grid[cross_h-1,i][0])
+        grid[cross_h+1,i][1] = grid[cross_h,i][1]+(grid[cross_h,i][1]-grid[cross_h-1,i][1])
+    return grid
+
+
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True, linewidth=160)
-    options = {'verbose' : False}
 
-    cross_w, cross_h = 6,7
-    #cross_w, cross_h = 6,5
+    cross_h, cross_w = 7,6
+    #cross_h, cross_w = 5,6
     kernel = build_kernel(32,4)
-
 
     file_list = get_file_list("images", max_files=0)
 
@@ -83,54 +126,17 @@ if __name__ == "__main__":
         
         if options["verbose"]:
             fig, (ax0,ax1) = plt.subplots(1,2)
-            ax0.imshow(image, interpolation='nearest', cmap=plt.cm.gray)
-            ax1.imshow(filtered, interpolation='nearest', cmap=plt.cm.gray)
-
-        markers = np.dstack(np.unravel_index(np.argsort(filtered.ravel()), image.shape))
-        markers_y = markers[0,-128:,0]
-        markers_x = markers[0,-128:,1]
-
-        fitx = bin_and_predict(markers_x,cross_w)
-        fity = bin_and_predict(markers_y,cross_h)
-
-        if options["verbose"]:
-            plt.scatter(markers_x,markers_y)
-            plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
-            plt.show()
-
-        reps = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
-        for ix,x in enumerate(fitx):
-            for iy,y in enumerate(fity):
-                idx = [np.linalg.norm([x-markers_x, y-markers_y], axis=0)<25]
-                if np.sum(idx) > 0:
-                    correct_x, correct_y = np.median(markers_x[idx]), np.median(markers_y[idx])
-                else:
-                    correct_x, correct_y = x,y # no values found, use as predicted from grid
-                reps[iy+1,ix+1] = correct_x, correct_y
-    
+            ax0.imshow(image, interpolation='none', cmap=plt.cm.gray)
+            ax1.imshow(filtered, interpolation='none', cmap=plt.cm.gray)
 
 
-        for i in range(1,cross_h+1):
-            reps[i,0][0] = reps[i,1][0]-(reps[i,2][0]-reps[i,1][0])
-            reps[i,0][1] = reps[i,1][1]-(reps[i,2][1]-reps[i,1][1])
-
-            reps[i,cross_w+1][0] = reps[i,cross_w][0]+(reps[i,cross_w][0]-reps[i,cross_w-1][0])
-            reps[i,cross_w+1][1] = reps[i,cross_w][1]+(reps[i,cross_w][1]-reps[i,cross_w-1][1])
-
-        for i in range(0,cross_w+2):
-            reps[0,i][0] = reps[1,i][0]-(reps[2,i][0]-reps[1,i][0])
-            reps[0,i][1] = reps[1,i][1]-(reps[2,i][1]-reps[1,i][1])
-
-            reps[cross_h+1,i][0] = reps[cross_h,i][0]+(reps[cross_h,i][0]-reps[cross_h-1,i][0])
-            reps[cross_h+1,i][1] = reps[cross_h,i][1]+(reps[cross_h,i][1]-reps[cross_h-1,i][1])
-
-
-        print reps
+        grid = compute_grid(filtered, (cross_h,cross_w))
+        print grid
 
         for i in range(cross_h+1):
             for j in range(cross_w+1):
-                xb, xe = np.min((reps[i,j][0], reps[i+1,j][0])), np.max((reps[i,j+1][0], reps[i+1,j+1][0])) 
-                yb, ye = np.min((reps[i,j][1], reps[i,j+1][1])), np.max((reps[i+1,j][1], reps[i+1,j+1][1])) 
+                xb, xe = np.min((grid[i,j][0], grid[i+1,j][0])), np.max((grid[i,j+1][0], grid[i+1,j+1][0])) 
+                yb, ye = np.min((grid[i,j][1], grid[i,j+1][1])), np.max((grid[i+1,j][1], grid[i+1,j+1][1])) 
                 
                 plt.figure("%d,%d"%(i,j))
                 plt.imshow(image[yb:ye,xb:xe], cmap='gray')
@@ -141,5 +147,5 @@ if __name__ == "__main__":
             plt.figure("extract")
             plt.imshow(image, cmap="gray")
 
-            plt.scatter([p[0] for p in reps.flat], [p[1] for p in reps.flat], color='red')
+            plt.scatter([p[0] for p in grid.flat], [p[1] for p in grid.flat], color='red')
             plt.show()
