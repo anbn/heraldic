@@ -1,25 +1,15 @@
-import os, sys, time
+import os, sys, time, getopt
 import numpy as np
 import matplotlib.pyplot as plt
-from skimage import io, exposure
 
-from skimage.morphology import disk
-from skimage.filters import rank
-from skimage.color import rgb2gray
-from skimage.util import img_as_uint
-from skimage.exposure import equalize_hist, histogram, cumulative_distribution
-from skimage.transform import hough_line, hough_line_peaks, probabilistic_hough_line
-from skimage.feature import canny
+from skimage import io
 
 from scipy.ndimage import convolve
 from scipy.ndimage.interpolation import rotate
-
 from scipy.optimize import leastsq
 from scipy.stats import binned_statistic
 
-
 options = { 'verbose' : True }
-
 
 def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_files=0):
     file_list = []
@@ -90,31 +80,14 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
             else:
                 valid[iy+1,ix+1] = False
 
-    left  = grid[cross_h/2+1,cross_w/2-2][0],grid[cross_h/2+1,cross_w/2-2][1]
-    right = grid[cross_h/2+1,cross_w/2+3][0],grid[cross_h/2+1,cross_w/2+3][1]
-    mid = (np.asarray(left) + np.asarray(right)) / 2
-    rotation = np.arctan2(*(right-mid)[::-1])/np.pi*180
+    #left  = grid[cross_h/2+1,cross_w/2-2][0],grid[cross_h/2+1,cross_w/2-2][1]
+    #right = grid[cross_h/2+1,cross_w/2+3][0],grid[cross_h/2+1,cross_w/2+3][1]
+    #mid = (np.asarray(left) + np.asarray(right)) / 2
+    #rotation = np.arctan2(*(right-mid)[::-1])/np.pi*180
     #plt.scatter(*left, color="black")
     #plt.scatter(*mid, color="black")
     #plt.scatter(*right, color="black")
 
-
-    #for i in range(1,cross_h+1):
-    #    grid[i,0][0] = grid[i,1][0]-(grid[i,2][0]-grid[i,1][0])
-    #    grid[i,0][1] = grid[i,1][1]-(grid[i,2][1]-grid[i,1][1])
-
-    #    grid[i,cross_w+1][0] = grid[i,cross_w][0]+(grid[i,cross_w][0]-grid[i,cross_w-1][0])
-    #    grid[i,cross_w+1][1] = grid[i,cross_w][1]+(grid[i,cross_w][1]-grid[i,cross_w-1][1])
-
-    #for i in range(0,cross_w+2):
-    #    grid[0,i][0] = grid[1,i][0]-(grid[2,i][0]-grid[1,i][0])
-    #    grid[0,i][1] = grid[1,i][1]-(grid[2,i][1]-grid[1,i][1])
-
-    #    grid[cross_h+1,i][0] = grid[cross_h,i][0]+(grid[cross_h,i][0]-grid[cross_h-1,i][0])
-    #    grid[cross_h+1,i][1] = grid[cross_h,i][1]+(grid[cross_h,i][1]-grid[cross_h-1,i][1])
-
-
-    print
     for i in range(1,cross_h+1):
         fx = [x             for x,v in zip(np.arange(cross_w+2), valid[i]) if v]
         fy = [grid[i,j][0]  for j,v in zip(np.arange(cross_w+2), valid[i]) if v]
@@ -136,7 +109,7 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
         grid[0,i]         = (int(fit1[0]),  int(fit2[0]))
         grid[cross_h+1,i] = (int(fit1[-1]), int(fit2[-1]))
 
-    return grid, rotation
+    return grid
 
 
 def process_plate(image, kernel, (cross_h,cross_w)):
@@ -147,8 +120,7 @@ def process_plate(image, kernel, (cross_h,cross_w)):
         ax0.imshow(image, interpolation='none', cmap=plt.cm.gray)
         ax1.imshow(filtered, interpolation='none', cmap=plt.cm.gray)
 
-    grid, rotation = compute_grid(filtered, (cross_h,cross_w))
-    print "(rotation: %f)" % rotation
+    grid = compute_grid(filtered, (cross_h,cross_w))
 
     if options["verbose"]:
         plt.figure("extract")
@@ -166,23 +138,70 @@ def process_plate(image, kernel, (cross_h,cross_w)):
             plt.imshow(image[yb:ye,xb:xe], cmap='gray')
     plt.show()
 
+def usage():
+    print "python %s image [options]" % sys.argv[0]
+    sys.exit(0)
+
 
 if __name__ == "__main__":
-    np.set_printoptions(precision=4, suppress=True, linewidth=160)
+    np.set_printoptions(precision=4,  suppress=True,  linewidth=160)
 
-    cross_h, cross_w = 7,6
-    #cross_h, cross_w = 5,6
-    kernel = build_kernel(32,4)
+    kernel = build_kernel(32, 4)
 
-    file_list = get_file_list("images", max_files=0)
+    left, right, single = None, None, None
+    in_file, out_folder = None, None
 
-    for n,f in enumerate(file_list[-1:]):
-        print "%d/%d %s" % (n+1,len(file_list),f),
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],"hl:r:s:i:o:",["help","left=","right=","single=","in=","out="])
+    except getopt.GetoptError as err:
+        print str(err)  # will print something like "option -a not recognized"
+        sys.exit(2)
+    for o,  a in opts:
+        if o == "-v":
+            options["verbose"] = True
+        elif o in ("-l","--left") and a in ("ignore","small","big"):
+            left = a
+        elif o in ("-r","--right") and a in ("ignore","small","big"):
+            right = a
+        elif o in ("-s","--single") and a in ("small","big"):
+            single = a
+        elif o in ("-i","--in"):
+            in_file = a
+        elif o in ("-o","--out"):
+            out_folder = a
+        elif o in ("-h","--help"):
+            usage()
+            sys.exit(0)
+        elif o in ("-o"):
+            output = a
+        else:
+            assert False,  "unhandled option"
 
-        imi = io.imread(f)
-        plate_left  = imi[:, int(0.6*imi.shape[1]):].astype('float')
-        plate_right = imi[:,:int(0.4*imi.shape[1]) ].astype('float')
+    if (right is None) != (left is None):
+        print "you have to specify both pages, right and left"
+        sys.exit(1)
+    if right is None and single is None:
+        print "choose either single or double page processing"
+        sys.exit(1)
+    if in_file is None or out_folder is None:
+        print "please specify input file and output folder"
+        sys.exit(1)
 
-        process_plate(plate_left,  kernel, (cross_h, cross_w))
-        process_plate(plate_right, kernel, (cross_h, cross_w))
+    if not os.path.exists(out_folder):
+        os.makedirs(out_folder)
 
+    # file_list = get_file_list("images",  max_files=0)
+
+    imi = io.imread(in_file)
+
+    if single is None:
+        plate_left  = imi[:, :int(0.4*imi.shape[1]) ].astype('float')
+        plate_right = imi[:,  int(0.6*imi.shape[1]):].astype('float')
+
+        if not left=="ignore":
+            process_plate(plate_left,   kernel, (7 if left=="big" else 5,  6))
+        if not right=="ignore":
+            process_plate(plate_right,  kernel, (7 if right=="big" else 5,  6))
+    else:
+        plate = imi.astype('float')
+        process_plate(plate,  kernel,  (7 if single=="big" else 5,  6))
