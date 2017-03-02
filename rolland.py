@@ -9,7 +9,7 @@ from scipy.ndimage.interpolation import rotate
 from scipy.optimize import leastsq
 from scipy.stats import binned_statistic
 
-options = { 'verbose' : True }
+options = { 'verbose' : False }
 
 def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_files=0):
     file_list = []
@@ -35,10 +35,10 @@ def bin_and_predict(vals, bins):
     neighbours = np.zeros_like(vals)
     hist_stats_x = np.zeros(bins)
     for i in range(vals.shape[0]):
-        neighbours[i] = np.sum(distances[i]<16)
+        neighbours[i] = np.sum(distances[i]<50)
     for i in range(bins):
         most_popular = np.argmax(neighbours)
-        neighbours[distances[most_popular,:]<16]=0
+        neighbours[distances[most_popular,:]<50]=0
         hist_stats_x[i] = vals[most_popular]
     hist_stats_x = np.sort(hist_stats_x)
 
@@ -61,7 +61,7 @@ def build_kernel(size, band):
     return kernel
 
 
-def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
+def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=50):
     """ fits a grid over the given responses
         num: take num highest responses
         dist_thres: discard points more than dist_thres pixels away from grid crossings
@@ -121,7 +121,7 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
     return grid
 
 
-def process_plate(image, kernel, (cross_h,cross_w)):
+def process_plate(image, kernel, (cross_h,cross_w), (out_folder, out_prefix)):
     filtered = convolve(image, kernel)
     
     if options["verbose"]:
@@ -142,10 +142,17 @@ def process_plate(image, kernel, (cross_h,cross_w)):
         for j in range(cross_w+1):
             xb, xe = np.min((grid[i,j][0], grid[i+1,j][0])), np.max((grid[i,j+1][0], grid[i+1,j+1][0])) 
             yb, ye = np.min((grid[i,j][1], grid[i,j+1][1])), np.max((grid[i+1,j][1], grid[i+1,j+1][1])) 
+
+            imo = image[yb:ye,xb:xe]
             
-            plt.figure("%d,%d"%(i,j))
-            plt.imshow(image[yb:ye,xb:xe], cmap='gray')
-    plt.show()
+            plt.imsave(os.path.join(out_folder, "%s-%d%d" % (out_prefix,i,j)), imo, cmap="gray")
+
+            if options["verbose"]:
+                plt.figure("%d,%d"%(i,j))
+                plt.imshow(imo, cmap='gray')
+
+    if options["verbose"]:
+        plt.show()
 
 def usage():
     print "python %s image [options]" % sys.argv[0]
@@ -181,8 +188,6 @@ if __name__ == "__main__":
         elif o in ("-h","--help"):
             usage()
             sys.exit(0)
-        elif o in ("-o"):
-            output = a
         else:
             assert False,  "unhandled option"
 
@@ -198,6 +203,7 @@ if __name__ == "__main__":
 
     if not os.path.exists(out_folder):
         os.makedirs(out_folder)
+    out_prefix = "".join(os.path.basename(in_file).split('.')[:-1])
 
     # file_list = get_file_list("images",  max_files=0)
 
@@ -208,9 +214,9 @@ if __name__ == "__main__":
         plate_right = imi[:,  int(0.6*imi.shape[1]):].astype('float')
 
         if not left=="ignore":
-            process_plate(plate_left,   kernel, (7 if left=="big" else 5,  6))
+            process_plate(plate_left,   kernel, (7 if left=="big" else 5,  6), (out_folder,out_prefix+"-left"))
         if not right=="ignore":
-            process_plate(plate_right,  kernel, (7 if right=="big" else 5,  6))
+            process_plate(plate_right,  kernel, (7 if right=="big" else 5,  6), (out_folder,out_prefix+"-right"))
     else:
         plate = imi.astype('float')
-        process_plate(plate,  kernel,  (7 if single=="big" else 5,  6))
+        process_plate(plate,  kernel,  (7 if single=="big" else 5,  6), (out_folder,out_prefix+"-single"))
