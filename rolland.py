@@ -29,20 +29,28 @@ def fit_and_predict(fx,fy, predict):
     return func_linear(final_params,predict)
 
 
-def bin_and_predict(vals, bins, verbose=False):
-    hist_stats_x, _, _, = binned_statistic(vals,vals, statistic='median', bins=bins)
+def bin_and_predict(vals, bins):
+    vals = np.sort(vals)
+    distances = np.abs((vals.reshape(1,-1) - vals.reshape(-1,1)))
+    neighbours = np.zeros_like(vals)
+    hist_stats_x = np.zeros(bins)
+    for i in range(vals.shape[0]):
+        neighbours[i] = np.sum(distances[i]<16)
+    for i in range(bins):
+        most_popular = np.argmax(neighbours)
+        neighbours[distances[most_popular,:]<16]=0
+        hist_stats_x[i] = vals[most_popular]
+    hist_stats_x = np.sort(hist_stats_x)
 
     fy = hist_stats_x
     fx = np.arange(fy.shape[0])
-    
     fxx = np.arange(bins)
     fyy = fit_and_predict(fx,fy,fxx)
-    if verbose:
-        plt.figure("fit"),
-        plt.scatter(xrange(vals.shape[0]), np.sort(vals))
-        plt.plot(fx,fy,'go',fxx,fyy,'r-')
-        plt.show()
-    #return np.hstack((fyy[0],hist_stats_x,fyy[-1]))
+    #if options["verbose"]:
+    #    plt.figure("fit"),
+    #    plt.scatter(xrange(vals.shape[0]), np.sort(vals))
+    #    plt.plot(fx,fy,'go',fxx,fyy,'r-')
+    #    plt.show()
     return fyy
 
 
@@ -68,6 +76,7 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=25):
     if options["verbose"]:
         plt.scatter(markers_x,markers_y)
         plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
+    plt.show()
 
     grid = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
     valid = np.zeros((cross_h+2,cross_w+2), dtype=bool)
