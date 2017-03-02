@@ -11,17 +11,6 @@ from scipy.stats import binned_statistic
 
 options = { 'verbose' : False }
 
-def get_file_list(directory, extensions=['.jpg','.jpeg','.png','.tif'], max_files=0):
-    file_list = []
-    for f in os.listdir(directory):
-        name, file_ext = os.path.splitext(f)
-        if file_ext in extensions and name[0]!='.':
-            file_list.append(os.path.join(directory, name + file_ext))
-    
-    file_list = sorted(file_list)
-    return file_list if max_files==0 else file_list[:max_files]
-
-
 def fit_and_predict(fx,fy, predict):
     func_linear = lambda params,x: params[0]*x+params[1]
     error_func  = lambda params,fx,fy: func_linear(params,fx)-fy
@@ -46,11 +35,11 @@ def bin_and_predict(vals, bins):
     fx = np.arange(fy.shape[0])
     fxx = np.arange(bins)
     fyy = fit_and_predict(fx,fy,fxx)
-    #if options["verbose"]:
-    #    plt.figure("fit"),
-    #    plt.scatter(xrange(vals.shape[0]), np.sort(vals))
-    #    plt.plot(fx,fy,'go',fxx,fyy,'r-')
-    #    plt.show()
+    if False and options["verbose"]:
+        plt.figure("fit"),
+        plt.scatter(xrange(vals.shape[0]), np.sort(vals))
+        plt.plot(fx,fy,'go',fxx,fyy,'r-')
+        plt.show()
     return fyy
 
 
@@ -62,7 +51,8 @@ def build_kernel(size, band):
 
 
 def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=50):
-    """ fits a grid over the given responses
+    """
+        fits a grid over the given responses
         num: take num highest responses
         dist_thres: discard points more than dist_thres pixels away from grid crossings
     """
@@ -75,8 +65,8 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=50):
 
     if options["verbose"]:
         plt.scatter(markers_x,markers_y)
-        plt.scatter(np.tile(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
-    plt.show()
+        plt.scatter(np.repeat(fitx,cross_h), np.tile(fity,cross_w), color='yellow')
+        plt.show()
 
     grid = np.zeros((cross_h+2,cross_w+2), dtype='int, int')
     valid = np.zeros((cross_h+2,cross_w+2), dtype=bool)
@@ -88,14 +78,6 @@ def compute_grid(filtered, (cross_h, cross_w), num=128, dist_thres=50):
                 valid[iy+1,ix+1] = True
             else:
                 valid[iy+1,ix+1] = False
-
-    #left  = grid[cross_h/2+1,cross_w/2-2][0],grid[cross_h/2+1,cross_w/2-2][1]
-    #right = grid[cross_h/2+1,cross_w/2+3][0],grid[cross_h/2+1,cross_w/2+3][1]
-    #mid = (np.asarray(left) + np.asarray(right)) / 2
-    #rotation = np.arctan2(*(right-mid)[::-1])/np.pi*180
-    #plt.scatter(*left, color="black")
-    #plt.scatter(*mid, color="black")
-    #plt.scatter(*right, color="black")
 
     for i in range(1,cross_h+1):
         fx = [x             for x,v in zip(np.arange(cross_w+2), valid[i]) if v]
@@ -154,6 +136,17 @@ def process_plate(image, kernel, (cross_h,cross_w), (out_folder, out_prefix)):
     if options["verbose"]:
         plt.show()
 
+def parse_size(str):
+    if str=="big":     return (7,6)
+    elif str=="small": return (5,6)
+    elif ":" in str:
+        a,b = str.split(':')
+        return (int(a), int(b))
+    else:
+        print "unable to parse grid size"
+        sys.exit(1)
+
+
 def usage():
     print "python %s image [options]" % sys.argv[0]
     sys.exit(0)
@@ -168,18 +161,18 @@ if __name__ == "__main__":
     in_file, out_folder = None, None
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hl:r:s:i:o:",["help","left=","right=","single=","in=","out="])
+        opts, args = getopt.getopt(sys.argv[1:],"hl:r:s:i:o:v",["help","left=","right=","single=","in=","out=","verbose"])
     except getopt.GetoptError as err:
         print str(err)  # will print something like "option -a not recognized"
         sys.exit(2)
     for o,  a in opts:
-        if o == "-v":
+        if o in ("-v", "--verbose"):
             options["verbose"] = True
-        elif o in ("-l","--left") and a in ("ignore","small","big"):
+        elif o in ("-l","--left"):
             left = a
-        elif o in ("-r","--right") and a in ("ignore","small","big"):
+        elif o in ("-r","--right"):
             right = a
-        elif o in ("-s","--single") and a in ("small","big"):
+        elif o in ("-s","--single"):
             single = a
         elif o in ("-i","--in"):
             in_file = a
@@ -205,8 +198,6 @@ if __name__ == "__main__":
         os.makedirs(out_folder)
     out_prefix = "".join(os.path.basename(in_file).split('.')[:-1])
 
-    # file_list = get_file_list("images",  max_files=0)
-
     imi = io.imread(in_file)
 
     if single is None:
@@ -214,9 +205,9 @@ if __name__ == "__main__":
         plate_right = imi[:,  int(0.6*imi.shape[1]):].astype('float')
 
         if not left=="ignore":
-            process_plate(plate_left,   kernel, (7 if left=="big" else 5,  6), (out_folder,out_prefix+"-left"))
+            process_plate(plate_left,   kernel, parse_size(left), (out_folder,out_prefix+"-left"))
         if not right=="ignore":
-            process_plate(plate_right,  kernel, (7 if right=="big" else 5,  6), (out_folder,out_prefix+"-right"))
+            process_plate(plate_right,  kernel, parse_size(right), (out_folder,out_prefix+"-right"))
     else:
         plate = imi.astype('float')
-        process_plate(plate,  kernel,  (7 if single=="big" else 5,  6), (out_folder,out_prefix+"-single"))
+        process_plate(plate,  kernel,  parse_size(single), (out_folder,out_prefix+"-single"))
