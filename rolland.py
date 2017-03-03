@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+
 import os, sys, time, getopt
 import numpy as np
 import matplotlib.pyplot as plt
@@ -199,15 +202,29 @@ if __name__ == "__main__":
     out_prefix = "".join(os.path.basename(in_file).split('.')[:-1])
 
     imi = io.imread(in_file)
+    print "Processing %s..." % in_file,
 
     if single is None:
         plate_left  = imi[:, :int(0.4*imi.shape[1]) ].astype('float')
         plate_right = imi[:,  int(0.6*imi.shape[1]):].astype('float')
 
         if not left=="ignore":
-            process_plate(plate_left,   kernel, parse_size(left), (out_folder,out_prefix+"-left"))
+            try:
+                process_plate(plate_left,   kernel, parse_size(left), (out_folder,out_prefix+"-left"))
+                print "left-done",
+            except: print "left-failed",
+        else: print "left-ignored",
         if not right=="ignore":
-            process_plate(plate_right,  kernel, parse_size(right), (out_folder,out_prefix+"-right"))
+            try:
+                process_plate(plate_right,  kernel, parse_size(right), (out_folder,out_prefix+"-right"))
+                print "right-done",
+            except: print "right-failed",
+        else: print "right-ignored",
     else:
         plate = imi.astype('float')
-        process_plate(plate,  kernel,  parse_size(single), (out_folder,out_prefix+"-single"))
+        try:
+            process_plate(plate,  kernel,  parse_size(single), (out_folder,out_prefix+"-single"))
+            print "single-done",
+        except:
+            print "single-failed",
+    print "done."
