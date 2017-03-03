@@ -10,7 +10,6 @@ from skimage import io
 from scipy.ndimage import convolve
 from scipy.ndimage.interpolation import rotate
 from scipy.optimize import leastsq
-from scipy.stats import binned_statistic
 
 options = { 'verbose' : False }
 
