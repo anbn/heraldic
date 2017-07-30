@@ -1,6 +1,11 @@
+
 # Rolland
 
-This program automatically extracts single images of heraldry from book pages by detecting the grid and predicting missing values.
+This program automatically extracts single images of heraldry from book pages by detecting the grid and predicting missing values using regression.
+
+<div align="center">
+  <img src="https://github.com/anbn/heraldic/blob/master/images/figure_1.jpg"><br><br>
+</div>
 
 ## Usage
 
